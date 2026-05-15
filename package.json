@@ -15,5 +15,7 @@
   "author": "Ziddi3",
   "license": "ISC",
   "type": "commonjs",
-  "dependencies": {}
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
 }
