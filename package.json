@@ -1,1 +1,19 @@
-{"name":"bobs-sleep-tracker","version":"1.0.0","description":"BOB Sleep Tracker deployed for sleep.methodz.ca","main":"server.js","scripts":{"start":"node server.js"},"keywords":["sleep","tracker","method-media","bob"],"author":"Ziddi3","license":"ISC","type":"commonjs","dependencies":{}}
+{
+  "name": "bobs-sleep-tracker",
+  "version": "1.0.0",
+  "description": "BOB Sleep Tracker deployed for sleep.methodz.ca",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "sleep",
+    "tracker",
+    "method-media",
+    "bob"
+  ],
+  "author": "Ziddi3",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {}
+}

@@ -1,1 +1,420 @@
-PLACEHOLDER
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bob's Sleep Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- QR Code library (CDN) -->
+  <script src="js/qrcode.min.js"></script>
+  <!-- jsQR for reading QR codes from images -->
+  <script src="js/jsqr.min.js"></script>
+  <style>
+    @keyframes fadeInUp {
+      from { opacity:0; transform:translateY(12px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    #toastContainer {
+      position: fixed; bottom: 24px; right: 24px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 9999; pointer-events: none;
+    }
+  </style>
+<style>
+  .method-media-badge {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(10,15,30,0.92);
+    border: 1px solid var(--line2);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--muted2);
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    z-index: 9998;
+    backdrop-filter: blur(8px);
+    transition: all 0.22s ease;
+  }
+  .method-media-badge:hover {
+    border-color: var(--blue-dim);
+    color: var(--blue);
+    box-shadow: 0 0 12px rgba(0,170,255,0.15);
+  }
+  .method-media-badge span {
+    color: var(--blue);
+    font-weight: 700;
+  }
+</style>
+
+</head>
+<body>
+
+<div id="toastContainer"></div>
+
+<div class="app-wrapper">
+
+  <!-- ══════════════════════════════════════════════════
+       BRAND HEADER
+       ══════════════════════════════════════════════════ -->
+  <header class="brand-header">
+    <div class="brand-left">
+      <div class="brand-logo-wrap">
+        <img src="assets/logo.png" alt="Bob's Sleep Tracker Logo" onerror="this.parentElement.innerHTML='<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:1.8rem;">🌙</div>'"/>
+      </div>
+      <div class="brand-title-wrap">
+        <div class="brand-name">BOB'S</div>
+        <div class="brand-sub">Sleep Tracker</div>
+        <div class="brand-tagline">AI-Powered · 6-Agent System · Offline + Online · Method Media</div>
+      </div>
+    </div>
+    <div class="brand-right">
+      <div class="mode-toggle-wrap">
+        <span class="mode-label active" id="labelOffline">OFFLINE</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="modeToggle" />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+        <span class="mode-label" id="labelOnline">ONLINE</span>
+        <div class="online-dot" id="onlineDot"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════
+       OFFLINE VIEW
+       ══════════════════════════════════════════════════ -->
+  <div id="offlineView">
+
+    <!-- Metrics Grid -->
+    <div class="metrics-grid" id="offMetrics"></div>
+
+    <!-- Entry Panel -->
+    <div class="card" style="margin-top:4px;" id="offEntryPanel"></div>
+
+    <!-- Formula -->
+    <div class="card" style="margin-top:12px;">
+      <div class="panel-title"><span class="icon">🧮</span> Tracking Formula</div>
+      <div class="formula-box">
+        D = total recorded calendar days &nbsp;|&nbsp; hᵢ = sleep hours for day i<br>
+        u = unknown days &nbsp;|&nbsp; n = confirmed no-sleep days<br>
+        s = sleep days where hᵢ > 0 &nbsp;|&nbsp; x = full sleep days where hᵢ ≥ 8<br><br>
+        Known Total Sleep: &nbsp; <strong>Tₖ = Σhᵢ</strong> (known days only)<br>
+        Known Sample Days: <strong>Dₖ = D − u</strong><br>
+        Average / Known Day: <strong>Aₖ = Tₖ ÷ Dₖ</strong><br>
+        Unknown Rate: <strong>Uᵣ = u ÷ D</strong><br>
+        Full Sleep Freq: <strong>F₈ = x ÷ Dₖ</strong><br><br>
+        <span style="color:var(--muted2);">Pattern is not assumed. Pattern is inferred from logged sequences over time.</span>
+      </div>
+    </div>
+
+    <!-- Log Table -->
+    <div class="card" style="margin-top:12px;">
+      <div class="panel-title"><span class="icon">📋</span> Recorded Days</div>
+      <div id="offLogTable"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+        <button class="btn btn-ghost" onclick="exportData()">📤 Export JSON</button>
+        <button class="btn btn-ghost" onclick="copySummary()">📋 Copy Summary</button>
+        <button class="btn btn-danger" onclick="resetAll()">🗑 Reset Tracker</button>
+      </div>
+    </div>
+
+  </div><!-- /offlineView -->
+
+
+  <!-- ══════════════════════════════════════════════════
+       ONLINE VIEW — 6-AGENT SYSTEM
+       ══════════════════════════════════════════════════ -->
+  <div id="onlineView">
+
+    <!-- API Key Setup (shown only when key missing) -->
+    <div id="apiSetupBox" class="card" style="margin-bottom:12px;">
+      <div class="api-setup-box">
+        <h3>🔑 Groq API Key Required</h3>
+        <p>Enter your Groq API key to activate the 6-agent AI system.<br>
+        Your key is stored locally only — never sent to any third party.</p>
+        <div class="api-key-row">
+          <input type="password" id="apiKeyInput" placeholder="gsk_…your Groq API key…" />
+          <button class="btn btn-primary" onclick="saveApiKey()">Connect</button>
+        </div>
+        <p style="margin-top:10px;font-size:0.78rem;color:var(--muted);">
+          Get your free key at <a href="https://console.groq.com" target="_blank" style="color:var(--blue);">console.groq.com</a>
+        </p>
+      </div>
+    </div>
+
+    <!-- Agent System (shown when key present) -->
+    <div id="agentSystemBox" class="hidden">
+
+      <!-- Agent Status Bar -->
+      <div class="card card-glow" style="margin-bottom:12px;">
+        <div class="panel-title"><span class="icon">🤖</span> Agent System Status</div>
+        <div class="agent-status-bar">
+          <div class="agent-pill" id="agent-analyst">
+            <div class="agent-dot"></div>
+            <div>
+              <div class="agent-name">Analyst</div>
+              <div class="agent-status-text">Standby</div>
+            </div>
+          </div>
+          <div class="agent-pill" id="agent-voice">
+            <div class="agent-dot"></div>
+            <div>
+              <div class="agent-name">Voice</div>
+              <div class="agent-status-text">Standby</div>
+            </div>
+          </div>
+          <div class="agent-pill" id="agent-strategist">
+            <div class="agent-dot"></div>
+            <div>
+              <div class="agent-name">Strategist</div>
+              <div class="agent-status-text">Standby</div>
+            </div>
+          </div>
+          <div class="agent-pill" id="agent-auditor">
+            <div class="agent-dot"></div>
+            <div>
+              <div class="agent-name">Auditor</div>
+              <div class="agent-status-text">Standby</div>
+            </div>
+          </div>
+          <div class="agent-pill" id="agent-transcriber">
+            <div class="agent-dot"></div>
+            <div>
+              <div class="agent-name">Transcriber</div>
+              <div class="agent-status-text">Standby</div>
+            </div>
+          </div>
+          <div class="agent-pill" id="agent-datainput">
+            <div class="agent-dot"></div>
+            <div>
+              <div class="agent-name">Data Input</div>
+              <div class="agent-status-text">Standby</div>
+            </div>
+          </div>
+          <div class="agent-pill" id="agent-guardian">
+            <div class="agent-dot"></div>
+            <div>
+              <div class="agent-name">Guardian</div>
+              <div class="agent-status-text">Standby</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Tab System -->
+      <div class="card" style="margin-bottom:12px;">
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="chat" onclick="switchTab('chat')">💬 Chat</button>
+          <button class="tab-btn" data-tab="analysis" onclick="switchTab('analysis')">📊 Analysis</button>
+          <button class="tab-btn" data-tab="guardian" onclick="switchTab('guardian')">🛡 Memory</button>
+          <button class="tab-btn" data-tab="transcript" onclick="switchTab('transcript')">📝 Transcript</button>
+          <button class="tab-btn" data-tab="code" onclick="switchTab('code')">🔐 Session Code</button>
+          <button class="tab-btn" data-tab="restore" onclick="switchTab('restore')">♻️ Restore</button>
+        </div>
+
+        <!-- TAB: CHAT (Voice Q&A) -->
+        <div class="tab-content active" id="tab-chat">
+          <div class="panel-title"><span class="icon">🎙</span> Voice Conversation with BOB</div>
+
+          <!-- Voice Visualizer -->
+          <div class="voice-visualizer" id="voiceVisualizer">
+            <div class="voice-bar" style="height:8px;"></div>
+            <div class="voice-bar" style="height:14px;"></div>
+            <div class="voice-bar" style="height:20px;"></div>
+            <div class="voice-bar" style="height:28px;"></div>
+            <div class="voice-bar" style="height:36px;"></div>
+            <div class="voice-bar" style="height:42px;"></div>
+            <div class="voice-bar" style="height:48px;"></div>
+            <div class="voice-bar" style="height:42px;"></div>
+            <div class="voice-bar" style="height:36px;"></div>
+            <div class="voice-bar" style="height:28px;"></div>
+            <div class="voice-bar" style="height:20px;"></div>
+            <div class="voice-bar" style="height:14px;"></div>
+          </div>
+
+          <!-- Interim speech display -->
+          <div id="interimDisplay" style="min-height:22px;padding:4px 8px;color:var(--blue);font-size:0.85rem;font-style:italic;"></div>
+
+          <!-- Chat bubbles -->
+          <div class="chat-container" id="chatContainer" style="margin-top:6px;"></div>
+
+          <!-- Voice Controls -->
+          <div class="voice-controls" style="margin-top:14px;">
+            <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="Hold to speak">🎙</button>
+            <div style="flex:1;">
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="textInput" placeholder="Or type your message here…" style="flex:1;" />
+                <button class="btn btn-primary" id="textSendBtn">Send</button>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:6px;">
+                <button class="btn btn-ghost" style="font-size:0.78rem;padding:6px 10px;" onclick="stopSpeaking()">⏹ Stop</button>
+                <button class="btn btn-ghost" style="font-size:0.78rem;padding:6px 10px;" onclick="generateSessionCode()">🔐 End & Save Session</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: ANALYSIS -->
+        <div class="tab-content" id="tab-analysis">
+          <div class="panel-title"><span class="icon">📊</span> AI Sleep Analysis</div>
+          <div id="onlineAnalysisContent">
+            <div class="notice notice-blue">Analysis will appear once the session starts.</div>
+          </div>
+        </div>
+
+        <!-- TAB: GUARDIAN MEMORY -->
+        <div class="tab-content" id="tab-guardian">
+          <div class="panel-title"><span class="icon">🛡</span> Guardian Memory</div>
+          <div class="notice notice-blue" style="margin-bottom:12px;">
+            The Guardian Agent preserves your symptoms, confirmed facts, and sleep patterns across every session — ensuring nothing important is lost between conversations.
+          </div>
+          <div id="guardianContent">
+            <div class="text-muted">Memory will load when session begins.</div>
+          </div>
+        </div>
+
+        <!-- TAB: TRANSCRIPT -->
+        <div class="tab-content" id="tab-transcript">
+          <div class="panel-title"><span class="icon">📝</span> Session Transcript</div>
+          <div class="notice notice-blue" style="margin-bottom:10px;">
+            The Transcriber Agent silently records every interaction in this session.
+          </div>
+          <div class="transcript-log" id="transcriptLog">
+            <div class="transcript-entry"><span class="ts">[--:--:--]</span><span class="speaker-sys">SYS: </span>Waiting for session to start…</div>
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn btn-ghost btn-full" onclick="downloadTranscript()">⬇️ Download Full Transcript</button>
+          </div>
+        </div>
+
+        <!-- TAB: SESSION CODE -->
+        <div class="tab-content" id="tab-code">
+          <div class="panel-title"><span class="icon">🔐</span> Session Code & QR</div>
+          <div id="sessionCodeContent">
+            <div class="notice notice-blue">
+              <strong>How Session Codes Work:</strong><br>
+              When you end a session, your complete dataset is compressed and encoded into a QR code. This single image contains everything — sleep entries, symptoms, confirmed facts, and pattern history. Scan it anytime to restore all your data — no accounts, no passwords needed.
+            </div>
+            <div class="notice" style="margin-top:10px;">
+              Click <strong>"End & Save Session"</strong> in the Chat tab to generate your session code.
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: RESTORE -->
+        <div class="tab-content" id="tab-restore">
+          <div class="panel-title"><span class="icon">♻️</span> Restore from Session Code</div>
+          <div class="notice notice-blue" style="margin-bottom:14px;">
+            Use this to restore your data after a reset. Upload your saved QR code image, or paste your text code directly. The Guardian Agent will handle the rest.
+          </div>
+
+          <!-- QR Upload -->
+          <div class="qr-upload-zone" onclick="document.getElementById('qrFileInput').click()">
+            <div style="font-size:2rem;margin-bottom:8px;">📷</div>
+            <strong>Upload QR Code Image</strong><br>
+            <span style="font-size:0.8rem;">Click to select your saved QR code PNG</span>
+            <input type="file" id="qrFileInput" accept="image/*" style="display:none;" onchange="handleQRUpload(this)" />
+          </div>
+
+          <div style="text-align:center;margin:14px 0;color:var(--muted2);font-size:0.85rem;">— OR —</div>
+
+          <!-- Manual Code Input -->
+          <div>
+            <label style="font-size:0.8rem;color:var(--muted2);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;display:block;margin-bottom:6px;">Paste Text Session Code</label>
+            <textarea id="manualCodeInput" placeholder="Paste your session code here…" style="min-height:80px;font-family:monospace;font-size:0.78rem;"></textarea>
+            <button class="btn btn-primary btn-full btn-lg" style="margin-top:10px;" onclick="restoreFromTextCode()">♻️ Restore Data from Code</button>
+          </div>
+
+          <div class="notice" style="margin-top:14px;">
+            <strong>When to use this:</strong> After resetting or deleting your offline data, go online, come to this tab, and inject your last session code. The system will load your full history and continue tracking seamlessly.
+          </div>
+        </div>
+
+      </div><!-- /card (tabs) -->
+
+    </div><!-- /agentSystemBox -->
+
+  </div><!-- /onlineView -->
+
+</div><!-- /app-wrapper -->
+
+<!-- Agent Scripts -->
+<script src="js/agents/analyst.js"></script>
+<script src="js/agents/voice.js"></script>
+<script src="js/agents/strategist.js"></script>
+<script src="js/agents/transcriber.js"></script>
+<script src="js/agents/datainput.js"></script>
+<script src="js/agents/guardian.js"></script>
+<script src="js/orchestrator.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+// ── Groq API Shim (maps OpenAI endpoint calls → Groq) ──────
+// Groq uses identical API format — just swap base URL + model names
+(function() {
+  const origFetch = window.fetch.bind(window);
+  window.fetch = function(url, opts) {
+    if (typeof url === 'string' && url.includes('api.openai.com')) {
+      const groqKey = localStorage.getItem('bobs_groq_api_key') || '';
+      if (groqKey && groqKey.startsWith('gsk_')) {
+        url = url.replace('https://api.openai.com/v1', 'https://api.groq.com/openai/v1');
+        if (opts && opts.body) {
+          try {
+            const body = JSON.parse(opts.body);
+            if (body.model === 'gpt-4o')    body.model = 'llama-3.3-70b-versatile';
+            // TTS: use Web Speech API fallback instead of Groq TTS
+            // if (body.model === 'tts-1') body.model = 'playai-tts';
+            if (body.model === 'whisper-1') body.model = 'whisper-large-v3';
+            opts = { ...opts, body: JSON.stringify(body) };
+          } catch(e) {}
+        }
+      }
+    }
+    return origFetch(url, opts);
+  };
+})();
+</script>
+
+<a href="https://methodz.ca" target="_blank" class="method-media-badge">⚡ <span>Method Media</span></a>
+
+<script>
+// Post-load cleanup: remove any auto-injected platform branding elements
+(function() {
+  function cleanBranding() {
+    document.querySelectorAll('script[src*="ninja"], script[src*="daytona"], script[src*="method-media"]').forEach(function(el) { el.remove(); });
+    document.querySelectorAll('[id*="ninja"], [class*="ninja"], [id*="daytona"], [class*="daytona"]').forEach(function(el) {
+      if (!el.closest('.agent-status-bar') && !el.closest('#app')) { el.remove(); }
+    });
+    document.querySelectorAll('a[href*="method-media"], a[href*="method-media"], a[href*="ninjatech"]').forEach(function(el) { el.remove(); });
+  }
+  // Run on load and after a short delay to catch late-injected elements
+  cleanBranding();
+  setTimeout(cleanBranding, 1000);
+  setTimeout(cleanBranding, 3000);
+  setTimeout(cleanBranding, 5000);
+  // Also observe DOM mutations to catch dynamically injected elements
+  if (typeof MutationObserver !== 'undefined') {
+    var observer = new MutationObserver(function(mutations) {
+      var needsClean = false;
+      for (var i = 0; i < mutations.length; i++) {
+        for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+          var node = mutations[i].addedNodes[j];
+          if (node && node.outerHTML && (node.outerHTML.indexOf('ninja') > -1 || node.outerHTML.indexOf('daytona') > -1 || node.outerHTML.indexOf('method-media') > -1)) {
+            needsClean = true;
+            break;
+          }
+        }
+        if (needsClean) break;
+      }
+      if (needsClean) cleanBranding();
+    });
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+  }
+})();
+</script>
+</body>
+</html>
