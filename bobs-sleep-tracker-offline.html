@@ -11814,7 +11814,7 @@ class VoiceAgent {
       this.isSpeaking = true;
       this.orchestrator.emit("voice:speech_start", { text });
 
-      const res = await fetch("https://api.openai.com/v1/audio/speech", {
+      const res = await fetch("/api/openai/v1/audio/speech", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -11895,7 +11895,7 @@ class VoiceAgent {
       formData.append("model", "whisper-1");
       formData.append("language", "en");
 
-      const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      const res = await fetch("/api/openai/v1/audio/transcriptions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${this.apiKey}` },
         body: formData
@@ -12006,7 +12006,7 @@ STRICT RULES:
 
     let rawResponse;
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -12059,7 +12059,7 @@ CORRECTION DIRECTIVE: ${auditResult.directive}
 Please rewrite your response following the directive exactly. Be concise and stay grounded in the actual data context provided.`;
 
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -12910,7 +12910,7 @@ class AgentOrchestrator {
   constructor() {
     this.listeners = {};
     this.apiKey = null;
-    this.groqBaseURL = "https://api.groq.com/openai/v1";
+    this.groqBaseURL = "/api/openai/v1";
     this.isOnline = false;
     this.agents = {};
     this.uiCallbacks = {};
@@ -13136,8 +13136,8 @@ function boot() {
   renderOffline();
 
   // Try to restore API key
-  const savedKey = localStorage.getItem(GROQ_KEY_STORAGE);
-  if (savedKey) {
+  const savedKey = 'SERVER_MANAGED';
+  if (true) {
     document.getElementById("apiKeyInput").value = savedKey;
   }
 
@@ -13416,7 +13416,7 @@ async function initOnlineMode() {
 function getApiKey() {
   const input = document.getElementById("apiKeyInput")?.value?.trim();
   if (input) { localStorage.setItem(GROQ_KEY_STORAGE, input); return input; }
-  return localStorage.getItem(GROQ_KEY_STORAGE) || null;
+  return 'SERVER_MANAGED';
 }
 
 function showApiKeySetup() {
@@ -13859,9 +13859,9 @@ window.addEventListener("DOMContentLoaded", boot);
   window.fetch = function(url, opts) {
     if (typeof url === 'string' && url.includes('api.openai.com')) {
       // Check if we have a Groq key
-      const groqKey = localStorage.getItem('bobs_groq_api_key') || '';
+      const groqKey = 'SERVER_MANAGED';
       if (groqKey && groqKey.startsWith('gsk_')) {
-        url = url.replace('https://api.openai.com/v1', 'https://api.groq.com/openai/v1');
+        url = url.replace('/api/openai/v1', '/api/openai/v1');
         // Swap model names for Groq-compatible models
         if (opts && opts.body) {
           try {

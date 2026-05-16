@@ -156,7 +156,7 @@ class VoiceAgent {
       this.isSpeaking = true;
       this.orchestrator.emit("voice:speech_start", { text });
 
-      const res = await fetch("https://api.openai.com/v1/audio/speech", {
+      const res = await fetch("/api/openai/v1/audio/speech", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -237,7 +237,7 @@ class VoiceAgent {
       formData.append("model", "whisper-1");
       formData.append("language", "en");
 
-      const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      const res = await fetch("/api/openai/v1/audio/transcriptions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${this.apiKey}` },
         body: formData

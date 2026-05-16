@@ -9,7 +9,7 @@ class AgentOrchestrator {
   constructor() {
     this.listeners = {};
     this.apiKey = null;
-    this.groqBaseURL = "https://api.groq.com/openai/v1";
+    this.groqBaseURL = "/api/openai/v1";
     this.isOnline = false;
     this.agents = {};
     this.uiCallbacks = {};

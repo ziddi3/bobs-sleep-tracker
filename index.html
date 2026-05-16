@@ -359,9 +359,9 @@
   const origFetch = window.fetch.bind(window);
   window.fetch = function(url, opts) {
     if (typeof url === 'string' && url.includes('api.openai.com')) {
-      const groqKey = localStorage.getItem('bobs_groq_api_key') || '';
+      const groqKey = 'SERVER_MANAGED';
       if (groqKey && groqKey.startsWith('gsk_')) {
-        url = url.replace('https://api.openai.com/v1', 'https://api.groq.com/openai/v1');
+        url = url.replace('/api/openai/v1', '/api/openai/v1');
         if (opts && opts.body) {
           try {
             const body = JSON.parse(opts.body);

@@ -83,7 +83,7 @@ STRICT RULES:
 
     let rawResponse;
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -136,7 +136,7 @@ CORRECTION DIRECTIVE: ${auditResult.directive}
 Please rewrite your response following the directive exactly. Be concise and stay grounded in the actual data context provided.`;
 
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
