@@ -4,6 +4,15 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 const STATIC_DIR = __dirname;
+const PROXY_WINDOW_MS = 60_000;
+const PROXY_REQUEST_LIMIT = 30;
+const PROXY_BODY_LIMIT = 8 * 1024 * 1024;
+const PROXY_ROUTES = new Set([
+  '/chat/completions',
+  '/audio/speech',
+  '/audio/transcriptions'
+]);
+const proxyClients = new Map();
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -19,31 +28,138 @@ const MIME_TYPES = {
   '.webp': 'image/webp'
 };
 
-function readBody(req) {
+function readBody(req, limit = PROXY_BODY_LIMIT) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', chunk => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    let size = 0;
+    let finished = false;
+
+    const fail = error => {
+      if (finished) return;
+      finished = true;
+      reject(error);
+    };
+
+    req.on('data', chunk => {
+      if (finished) return;
+      size += chunk.length;
+      if (size > limit) {
+        const error = new Error('Request body is too large.');
+        error.code = 'BODY_TOO_LARGE';
+        fail(error);
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (finished) return;
+      finished = true;
+      resolve(Buffer.concat(chunks));
+    });
+    req.on('error', fail);
   });
+}
+
+function clientAddress(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket.remoteAddress || 'unknown';
+}
+
+function allowProxyRequest(req) {
+  const key = clientAddress(req);
+  const now = Date.now();
+  const current = proxyClients.get(key);
+
+  if (!current || current.resetAt <= now) {
+    proxyClients.set(key, { count: 1, resetAt: now + PROXY_WINDOW_MS });
+    return true;
+  }
+
+  current.count += 1;
+  return current.count <= PROXY_REQUEST_LIMIT;
+}
+
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  if (origin && sameOrigin(req)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+}
+
+function sendJson(res, status, payload, extraHeaders = {}) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    ...extraHeaders
+  });
+  res.end(JSON.stringify(payload));
 }
 
 async function proxyGroq(req, res, urlPath) {
   const key = process.env.GROQ_API_KEY;
   if (!key) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      error: 'GROQ_API_KEY is not configured on the server.'
-    }));
+    sendJson(res, 503, { error: 'AI service is temporarily unavailable.' });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+    return;
+  }
+
+  if (!sameOrigin(req)) {
+    sendJson(res, 403, { error: 'Cross-origin AI proxy requests are not allowed.' });
+    return;
+  }
+
+  if (!allowProxyRequest(req)) {
+    sendJson(
+      res,
+      429,
+      { error: 'Too many AI requests. Please wait and try again.' },
+      { 'Retry-After': '60' }
+    );
     return;
   }
 
   const upstreamPath = urlPath.replace(/^\/api\/openai\/v1/, '');
-  const target = `https://api.groq.com/openai/v1${upstreamPath}`;
-  const body = await readBody(req);
+  if (!PROXY_ROUTES.has(upstreamPath)) {
+    sendJson(res, 404, { error: 'AI proxy route is not available.' });
+    return;
+  }
 
+  let body;
+  try {
+    body = await readBody(req);
+  } catch (error) {
+    if (error && error.code === 'BODY_TOO_LARGE') {
+      sendJson(res, 413, { error: 'Request body is too large.' });
+      return;
+    }
+    sendJson(res, 400, { error: 'Unable to read request body.' });
+    return;
+  }
+
+  const target = `https://api.groq.com/openai/v1${upstreamPath}`;
   const headers = {
-    'Authorization': `Bearer ${key}`
+    Authorization: `Bearer ${key}`
   };
 
   const contentType = req.headers['content-type'];
@@ -51,34 +167,31 @@ async function proxyGroq(req, res, urlPath) {
 
   try {
     const upstream = await fetch(target, {
-      method: req.method,
+      method: 'POST',
       headers,
-      body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body
+      body
     });
 
     const buf = Buffer.from(await upstream.arrayBuffer());
-    const responseHeaders = {
+    res.writeHead(upstream.status, {
       'Content-Type': upstream.headers.get('content-type') || 'application/octet-stream',
-      'Cache-Control': 'no-store'
-    };
-
-    res.writeHead(upstream.status, responseHeaders);
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff'
+    });
     res.end(buf);
-  } catch (err) {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      error: 'Groq proxy request failed.',
-      detail: err.message
-    }));
+  } catch {
+    sendJson(res, 502, { error: 'AI provider request failed.' });
   }
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  applyCors(req, res);
 
   if (req.method === 'OPTIONS') {
+    if (!sameOrigin(req)) {
+      sendJson(res, 403, { error: 'Cross-origin requests are not allowed.' });
+      return;
+    }
     res.writeHead(204);
     res.end();
     return;
@@ -87,12 +200,10 @@ const server = http.createServer(async (req, res) => {
   let urlPath = req.url.split('?')[0];
 
   if (urlPath === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
+    sendJson(res, 200, {
       status: 'ok',
-      service: 'bobs-sleep-tracker',
-      groqConfigured: Boolean(process.env.GROQ_API_KEY)
-    }));
+      service: 'bobs-sleep-tracker'
+    });
     return;
   }
 
