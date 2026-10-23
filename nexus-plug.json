@@ -1,0 +1,28 @@
+{
+  "protocol": "methodz.nexus-plug.v1",
+  "socket": {
+    "protocol": "methodz.nexus-socket.v1",
+    "socketId": "socket:sleep",
+    "dockId": "module-sleep",
+    "moduleId": "module-sleep",
+    "repository": "ziddi3/bobs-sleep-tracker",
+    "role": "tool",
+    "parentDockId": "module-tool-shed",
+    "public": true,
+    "entrypoint": "https://sleep.methodz.ca",
+    "provides": ["traversal", "projection"],
+    "requests": ["surface-manifestation"]
+  },
+  "projection": {
+    "protocol": "methodz.nexus-projection.v1",
+    "socketId": "socket:sleep",
+    "moduleId": "module-sleep",
+    "state": "available",
+    "doorwayOpen": true,
+    "emissiveScale": 1,
+    "ambientScale": 0.8,
+    "attention": "none",
+    "observedAt": "2026-10-23T06:45:00.000Z",
+    "sourceRevision": null
+  }
+}
